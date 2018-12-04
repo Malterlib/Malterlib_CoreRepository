@@ -1,0 +1,307 @@
+// Copyright © 2018 Nonna Holding AB 
+// Distributed under the MIT license, see license text in LICENSE.Malterlib
+
+Property
+{
+	MalterlibRepositoryEditor "" // User(Tools)="open -a SourceTree {}": Specify the editor to use for repositories. {} is replaced with the repository directory. The tool is launched from the repository directory.
+	{
+		!!MalterlibRepositoryEditor ""
+	}
+	MalterlibRepositoryEditorSequential false // User(Tools)=true: Set to true if your repository editor does not support launching concurrently
+	{
+		!!MalterlibRepositoryEditorSequential ""
+	}
+}
+Property
+{
+	!!HostPlatformFamily OSX
+
+	MalterlibRepositoryEditor "/usr/local/bin/fork status"
+	{
+		&
+		{
+			MalterlibRepositoryEditor ""
+			!Empty "@('/usr/local/bin'->FindFilesIn('fork'))"
+		}
+	}
+	MalterlibRepositoryEditor "open -a SourceTree {}"
+	{
+		&
+		{
+			MalterlibRepositoryEditor ""
+			!Empty "@('/Applications'->FindDirectoriesIn('SourceTree.app'))"
+		}
+	}
+}
+Property
+{
+	!!HostPlatformFamily Windows
+
+/*	ForkDirectory "@(USERPROFILE)/AppData/Local/Fork"
+	MalterlibRepositoryEditor "@(ForkDirectory)/Fork.exe status"
+	{
+		&
+		{
+			MalterlibRepositoryEditor ""
+			!Empty "@(ForkDirectory->FindFilesIn('Fork.exe'))"
+		}
+	}*/
+
+	SourceTreeDirectory "@(USERPROFILE)/AppData/Local/SourceTree"
+	MalterlibRepositoryEditor "@(SourceTreeDirectory)/SourceTree.exe -f {} status"
+	{
+		&
+		{
+			MalterlibRepositoryEditor ""
+			!Empty "@(SourceTreeDirectory->FindFilesIn('SourceTree.exe'))"
+		}
+	}
+	MalterlibRepositoryEditorSequential true
+	{
+		!!MalterlibRepositoryEditor "@(SourceTreeDirectory)/SourceTree.exe -f {} status"
+	}
+	MalterlibRepositoryEditorWorkingDir "@(SourceTreeDirectory)"
+	{
+		!!MalterlibRepositoryEditor "@(SourceTreeDirectory)/SourceTree.exe -f {} status"
+	}
+	MalterlibRepositoryEditorSleep "1.0"
+	{
+		!!MalterlibRepositoryEditor "@(SourceTreeDirectory)/SourceTree.exe -f {} status"
+	}
+}
+
+Repository
+{
+	UserEmail "" // User(Repository)=email@example.com: Specify user.email to configure for repositories
+	{
+		!!Repository.UserEmail ""
+	}
+	UserName "" // User(Repository)="Example Name": Specify user.name to configure for repositories
+	{
+		!!Repository.UserName ""
+	}
+
+	NoPushRemotes "upstream*"
+	{
+		!!Repository.NoPushRemotes ""
+	}
+
+	DefaultRoot "https://github.com/@(Repository.GithubCompany)"
+	{
+		&
+		{
+			Repository.DefaultRoot ""
+			!Repository.GithubCompany ""
+		}
+	}
+
+	DefaultPrefix "@(Repository.GithubCompany)_"
+	{
+		&
+		{
+			Repository.DefaultPrefix ""
+			!Repository.GithubCompany ""
+		}
+	}
+
+	DefaultLocationPrefix "@(Repository.DefaultPrefix->Replace('_', '/'))"
+	{
+		!!Repository.DefaultLocationPrefix ""
+	}
+
+	Type "Direct"
+	{
+		!!Repository.Type ""
+	}
+
+	MalterlibRoot "@(MalterlibRepoRoot)"
+	{
+		&
+		{
+			Repository.MalterlibRoot ""
+			!MalterlibRepoRoot ""
+		}
+	}
+
+	MalterlibRoot "https://github.com/Malterlib"
+	{
+		!!Repository.MalterlibRoot ""
+	}
+
+	ExternalRoot "https://github.com/Malterlib"
+	{
+		!!Repository.ExternalRoot ""
+	}
+
+	ConfigFile "@(this.IdentityPath->GetPath())/@(Repository.Type).MRepo"
+	{
+		&
+		{
+			Repository.ConfigFile ""
+			!Repository.Type "Root"
+		}
+	}
+	StateFile "@(this.IdentityPath->GetPath())/@(Repository.Type).MRepoState"
+	{
+		&
+		{
+			Repository.StateFile ""
+			!Repository.Type "Root"
+		}
+	}
+	Prefix "@(Repository.DefaultPrefix)"
+	{
+		&
+		{
+			Repository.Prefix ""
+			!Repository.DefaultPrefix ""
+		}
+	}
+
+	ProtectedBranches "protected/*;@(Repository.ProtectedBranches)"
+
+	ProtectedBranches "malterlib_*;@(Repository.ProtectedBranches)"
+	{
+		!!Repository.Type External
+	}
+
+	ProtectedTags "malterlib_*;@(Repository.ProtectedTags)"
+	{
+		!!Repository.Type External
+	}
+
+	URL "@(Repository.ExternalRoot)/@(this.Identity).git"
+	{
+		&
+		{
+			Repository.URL ""
+			Repository.Type External
+		}
+	}
+	URL "@(Repository.MalterlibRoot)/Malterlib_@(this.Identity).git"
+	{
+		&
+		{
+			Repository.URL ""
+			Repository.Type Malterlib
+		}
+	}
+	URL "@(Repository.DefaultRoot)/@(Repository.Prefix)@(this.Identity).git"
+	{
+		&
+		{
+			Repository.URL ""
+			Repository.Type Direct
+		}
+	}
+	Location "@('../../../External'->MakeAbsolute())/@(this.Identity->ParseFormatString('{}_{}', '{}/{}'))"
+	{
+		&
+		{
+			Repository.Location ""
+			Repository.Type External
+			Repository.ConvertUnderscoreToPath true
+		}
+	}
+	Location "@('../../../External'->MakeAbsolute())/@(this.Identity)"
+	{
+		&
+		{
+			Repository.Location ""
+			Repository.Type External
+		}
+	}
+
+	Location "@('../../../Malterlib'->MakeAbsolute())/@(this.Identity)"
+	{
+		&
+		{
+			Repository.Location ""
+			Repository.Type Malterlib
+		}
+	}
+
+	LocationPrefix "@(Repository.DefaultLocationPrefix)"
+	{
+		&
+		{
+			Repository.LocationPrefix ""
+			!Repository.DefaultLocationPrefix ""
+		}
+	}
+
+	CalcLocation "../../../@(Repository.LocationPrefix)@(this.Identity)"
+	
+	Location "@(Repository.CalcLocation->MakeAbsolute())"
+	{
+		&
+		{
+			Repository.Location ""
+			Repository.Type Direct
+			!Repository.SubmodulePrefix "nthoenuth"
+		}
+	}
+	DefaultBranch "malterlib"
+	{
+		&
+		{
+			Repository.DefaultBranch ""
+			Repository.Type External
+		}
+	}
+
+	DefaultUpstreamBranch "master"
+	{
+		&
+		{
+			Repository.DefaultUpstreamBranch ""
+			Repository.Type External
+		}
+	}
+
+	DefaultUpstreamBranch "@(DefaultBranch)"
+	{
+		!!Repository.DefaultUpstreamBranch ""
+	}
+
+	DefaultBranch "master"
+	{
+		!!Repository.DefaultBranch ""
+	}
+	Submodule "false"
+	{
+		!!Repository.Submodule ""
+	}
+	SubmodulePrefix "@(Repository.DefaultPrefix)"
+	{
+		&
+		{
+			Repository.SubmodulePrefix ""
+			!Repository.DefaultPrefix ""
+		}
+	}
+	SubmoduleName "External_@(this.Identity)"
+	{
+		&
+		{
+			Repository.SubmoduleName ""
+			Repository.Type External
+		}
+	}
+	SubmoduleName "Malterlib_@(this.Identity)"
+	{
+		&
+		{
+			Repository.SubmoduleName ""
+			Repository.Type Malterlib
+		}
+	}
+	SubmoduleName "@(Repository.SubmodulePrefix)@(this.Identity)"
+	{
+		&
+		{
+			Repository.SubmoduleName ""
+			Repository.Type Direct
+		}
+	}
+}

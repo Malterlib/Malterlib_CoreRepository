@@ -1,0 +1,21 @@
+// Copyright © 2018 Nonna Holding AB 
+// Distributed under the MIT license, see license text in LICENSE.Malterlib
+
+// Properties
+Include "Shared_Repository.MSettings"
+
+// Error checking
+Target.CheckErrors ""
+{
+	!CheckError ""
+}
+
+Workspace.CheckErrors ""
+{
+	!CheckError ""
+}
+
+Compile.CheckErrors ""
+{
+	!CheckError ""
+}

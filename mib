@@ -1,0 +1,387 @@
+#!/bin/bash
+# Copyright © 2017-2018 Nonna Holding AB
+# Distributed under the MIT license, see license text in LICENSE.Malterlib
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BASH_SOURCE_FULL="$DIR/${BASH_SOURCE[0]##*/}"
+
+set -e
+
+cd "$DIR"
+
+if [ -e .malterlib_only_repos ] && [[ "$MalterlibOnlyRepositoryManagement" == "" ]]; then
+	export MalterlibOnlyRepositoryManagement=true
+fi
+
+if [ -e Binaries/Malterlib/LICENSE.Malterlib ]; then
+	rm -rf Binaries/Malterlib
+fi
+
+if [ -e Malterlib/CoreRepository ]; then
+	find "$DIR/Malterlib/CoreRepository" -maxdepth 0 -type d -empty -exec rmdir {} \;
+fi
+
+function OutputInfo()
+{
+	echo $'\e[38;5;39m'"$@"$'\e[39m'
+}
+
+function OutputNote()
+{
+	echo $'\e[38;5;221m'"$@"$'\e[39m'
+}
+
+function OutputHeading()
+{
+	echo $'\e[38;5;118m'"$@"$'\e[39m'
+}
+
+function OutputError()
+{
+	echo $'\e[38;5;198m'"$@"$'\e[39m'
+}
+
+BootstrapInit=false
+function BootstrapInit()
+{
+	if $BootstrapInit; then
+		return
+	fi
+
+	BootstrapInit=true
+
+	echo 
+	OutputHeading '/¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯\'
+	OutputHeading '| Bootstrapping Malterlib |'
+	OutputHeading '\_________________________/'
+	echo
+
+	# Make sure that lfs is installed
+	if ! git lfs > /dev/null ; then
+		echo Please install git lfs
+		exit 1
+	fi
+
+	if ! cat ~/.gitconfig | grep 'filter "lfs"' > /dev/null ; then
+		git lfs install
+	fi
+
+	if [[ "$MalterlibPlatform" ==  Windows ]]; then
+		git config --global core.symlinks true
+	fi
+}
+
+function ReportBootstrapDone()
+{
+	if ! $BootstrapInit; then
+		return
+	fi
+
+	OutputHeading '/¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯\'
+	OutputHeading '| Successfully bootstrapped Malterlib |'
+	OutputHeading '\_____________________________________/'
+	echo
+}
+
+function DetectRepoRoot()
+{
+	if [[ "$MalterlibRepoRoot" == "" ]]; then
+
+		OutputInfo "Determine MalterlibRepoRoot from *.MBuildSystem:"
+
+		MalterlibRepoRoot=https://github.com/Malterlib
+		BuildSystemContents=`cat *.MBuildSystem | grep MalterlibRepoRoot || true`
+
+		ToMatch='[ \t]*MalterlibRepoRoot[ \t]+(.*)'
+		while [[ $BuildSystemContents =~ $ToMatch ]]; do
+	  		BuildSystemContents=${BASH_REMATCH[1]}
+	  		break
+		done
+
+		ToMatch='^"(.*)"$'
+		while [[ $BuildSystemContents =~ $ToMatch ]]; do
+	  		BuildSystemContents=${BASH_REMATCH[1]}
+	  		break
+		done
+		if [[ "$BuildSystemContents" != "" ]]; then
+			MalterlibRepoRoot="$BuildSystemContents"
+			echo "Found customized MalterlibRepoRoot: `OutputNote "$MalterlibRepoRoot"`"
+		else
+			echo "Using default MalterlibRepoRoot: `OutputNote "$MalterlibRepoRoot"`"
+		fi
+
+		echo 
+	fi
+}
+
+function GetMalterlibCoreHash()
+{
+	cat *.MRepo | grep 'Malterlib/CoreRepository ' | cut '-d ' -f 2 || true
+}
+
+if ! [ -e Malterlib/CoreRepository ]; then
+	BootstrapInit
+	DetectRepoRoot
+
+	if ! [ -e Malterlib/CoreRepository ]; then
+
+		OutputInfo "Cloning Malterlib/CoreRepository"
+
+		GitHash=`GetMalterlibCoreHash`
+		if [[ "$GitHash" != "" ]]; then
+			echo "Found commit hash in *.MRepo files: `OutputNote "$GitHash"`"
+
+			git clone -n "$MalterlibRepoRoot/Malterlib_CoreRepository.git" Malterlib/CoreRepository
+			pushd Malterlib/CoreRepository > /dev/null
+			git checkout -B master $GitHash
+			popd > /dev/null
+		else
+			OutputError "Cloud not find commit hash in *.MRepo files using latest default branch"
+
+			git clone "$MalterlibRepoRoot/Malterlib_CoreRepository.git" Malterlib/CoreRepository
+		fi
+
+		echo
+	fi
+fi
+
+if ! [ -e ./Malterlib/CoreRepository/Scripts/Detect.sh ]; then
+	# Upgrade path
+	git -C Malterlib/CoreRepository fetch
+
+	GitHash=`GetMalterlibCoreHash`
+	if [[ "$GitHash" == "" ]]; then
+		OutputError "Cloud not find commit hash in *.MRepo, cannot upgrade"
+		exit 1
+	fi
+
+	if [[ "$MalterlibRepositoryHardReset" == "true" ]] || (git -C Malterlib/CoreRepository branch -r --contains HEAD > /dev/null && [ -z "$(git -C Malterlib/CoreRepository status --porcelain || echo no)" ]); then
+		git -C Malterlib/CoreRepository checkout -B master $GitHash
+	else
+		OutputError "Malterlib/CoreRepository is not clean, please resolve the situation before trying to upgrade"
+		exit 1
+	fi
+fi
+
+source ./Malterlib/CoreRepository/Scripts/Detect.sh
+if [[ "$MalterlibPlatform" ==  Windows ]]; then
+	mkdir -p /tmp
+fi
+
+MalterlibBinariesPath="Binaries/Malterlib/${MalterlibPlatform}/${MalterlibArch}"
+MalterlibBinariesRepo="MalterlibBinaries_${MalterlibPlatform}_${MalterlibArch}"
+
+if [ -e "$MalterlibBinariesPath" ]; then
+	find "$DIR/$MalterlibBinariesPath" -maxdepth 0 -type d -empty -exec rmdir {} \;
+fi
+
+BootstrapVersion="2"
+
+if ! [ -e "$MalterlibBinariesPath/Bootstrap.version" ] || [[ `cat "$MalterlibBinariesPath/Bootstrap.version"` != "$BootstrapVersion" ]]; then
+	echo Removing binaries because they are not compatible with current bootstrap process
+	rm -rf "$MalterlibBinariesPath"
+fi
+
+if ! [ -e "$MalterlibBinariesPath" ]; then
+	BootstrapInit
+	DetectRepoRoot
+
+	if ! [ -e "$MalterlibBinariesPath" ]; then
+
+		OutputInfo "Cloning $MalterlibBinariesPath"
+
+		RepoFolder="Malterlib/CoreRepository/"
+		GitHash=`cat Malterlib/CoreRepository/*.MRepo | grep "\\.\\./\\.\\./$MalterlibBinariesPath " | cut '-d ' -f 2 || true`
+
+		if [[ "$GitHash" != "" ]]; then
+			echo "Found commit hash in ${RepoFolder}*.MRepo files: `OutputNote "$GitHash"`"
+
+			git clone -n "$MalterlibRepoRoot/$MalterlibBinariesRepo.git" $MalterlibBinariesPath
+			pushd $MalterlibBinariesPath > /dev/null
+			git checkout -B master $GitHash
+			popd > /dev/null
+		else
+			OutputError "Cloud not find commit hash in ${RepoFolder}*.MRepo files using latest default branch"
+
+			git clone "$MalterlibRepoRoot/$MalterlibBinariesRepo.git" $MalterlibBinariesPath
+		fi
+
+		echo
+	fi
+fi
+
+ReportBootstrapDone
+
+ScriptsDir="$PWD/Malterlib/CoreRepository/Scripts"
+NumArguments=$#
+if (( $NumArguments >= 1 )); then
+	Command=$1
+	shift
+fi
+
+while true; do
+	if [ -e "$PWD/Malterlib/CoreRepository/Scripts/mib.sh" ]; then
+		NewMTool=true
+	else
+		NewMTool=false
+	fi
+
+	function UpdateMTool()
+	{
+		if [[ "$MalterlibPlatform" ==  Windows ]] || [[ "$MalterlibSafeMib" == "true" ]]; then
+			DependencyFile=BuildSystem/SafeMib/SafeMib.MalterlibDependency
+
+			if [ -e "$DependencyFile" ]; then
+				"$MToolExecutable" CheckDependencies Verbose=true "Directory=BuildSystem/SafeMib"
+			fi
+
+			if ! [ -e BuildSystem/SafeMib/SafeMib.updated ]; then
+				echo Updating safe binaries
+
+				"$MToolExecutable" DiffCopy "$MalterlibBinariesPath/*" "BuildSystem/SafeMib/Binaries" "" 1 1
+				"$MToolExecutable" DiffCopy "Malterlib/CoreRepository/Scripts/*" "BuildSystem/SafeMib/Scripts" "" 1 1
+				"$MToolExecutable" TouchOrCreate "BuildSystem/SafeMib/SafeMib.updated"
+				ExcludePatterns="*/.git;*/.DS_Store"
+
+				if type MalterlibConvertPath > /dev/null; then
+					"$MToolExecutable" BuildDependencies "OutputFile=`MalterlibConvertPath \"$DIR/$DependencyFile\"`" "Output:`MalterlibConvertPath \"$DIR/BuildSystem/SafeMib/SafeMib.updated\"`" "Input:`MalterlibConvertPath \"$BASH_SOURCE_FULL\"`" "Find:`MalterlibConvertPath \"$MalterlibBinariesPath\"`/*;RIF;33;$ExcludePatterns" "Find:`MalterlibConvertPath \"$DIR/Malterlib/CoreRepository/Scripts\"`/*;RIF;33;$ExcludePatterns"
+				else
+					rm -f BuildSystem/SafeMib/SafeMib.updated
+				fi
+			fi
+
+			export MalterlibBinariesDir="$PWD/BuildSystem/SafeMib/Binaries"
+			ScriptsDir="$PWD/BuildSystem/SafeMib/Scripts"
+		fi
+	}
+
+	UpdateMTool
+
+	export -f UpdateMTool
+
+	function RunTests()
+	{
+		Start=$SECONDS
+
+		function OutputTime()
+		{
+			OutputNote "$((SECONDS-Start)) s"
+			Start=$SECONDS
+			echo
+		}
+
+		OutputInfo '[Generating]'
+		./mib generate Tests
+		source BuildSystem/SharedBuildSettings.sh
+		export MalterlibXCPrettyOptions="-t"
+		OutputTime
+
+		OutputInfo '[Building]'
+		./mib build Tests "$HostPlatform" "$HostArchitecture" "$1"
+		OutputTime
+
+		OutputInfo '[Testing]'
+		
+		if "$MalterlibDeployRoot/Tests/RunAllTests" --quiet ; then
+			OutputTime
+			OutputHeading Success
+		else
+			OutputTime
+			OutputError "Tests FAILED"
+			exit 1
+		fi
+	}
+
+	case "$Command" in
+		generate)
+			MissingSetup=false
+			if [[ "$MalterlibPlatform" ==  OSX ]] ; then
+				if [ -e ./Malterlib/CoreRepository/Setup/OSX/setup.sh ]; then
+					./Malterlib/CoreRepository/Setup/OSX/setup.sh CheckSetup
+				else
+					MissingSetup=true
+				fi
+			fi
+
+			set +e
+			if $NewMTool; then
+				"$ScriptsDir/mib.sh" generate "$@"
+			else
+				"$ScriptsDir/Generate.sh" "$@"
+			fi
+			MToolExit=$?
+			set -e
+			if [[ $MToolExit == 3 ]]; then
+				# TODO: deprecate this
+				echo MTool potentially updated, running command again
+				continue
+			elif [[ $MToolExit != 2 ]]; then
+				exit $MToolExit
+			fi
+
+			if $MissingSetup && [[ "$MalterlibPlatform" == OSX ]] && [ -e ./Malterlib/CoreRepository/Setup/OSX/setup.sh ]; then
+				./Malterlib/CoreRepository/Setup/OSX/setup.sh CheckSetup
+			fi
+		;;
+		setup_only)
+			# TODO: deprecate this
+			exit 0
+		;;
+		bootstrap_only)
+			exit 0
+		;;
+		setup)
+			if [[ "$MalterlibPlatform" ==  OSX ]] ; then
+				./Malterlib/CoreRepository/Setup/OSX/setup.sh "$@"
+			fi
+		;;
+		build)
+			./Malterlib/CoreRepository/BuildScripts/BuildWorkspace.sh "$@"
+		;;
+		test)
+			Config=Debug
+			if [[ "$1" != "" ]]; then
+				Config="$1"
+			fi
+			RunTests "$Config"
+		;;
+		test_release)
+			RunTests "Release (Tests)"
+		;;
+		build_target)
+			./Malterlib/CoreRepository/BuildScripts/BuildTarget.sh "$@"
+		;;
+		prebuild)
+			./Malterlib/CoreRepository/BuildScripts/Prebuild.sh "$@"
+		;;
+		postbuild)
+			./Malterlib/CoreRepository/BuildScripts/Postbuild.sh "$@"
+		;;
+		detect_system)
+			source ./Malterlib/CoreRepository/BuildScripts/DetectSystem.sh "$@"
+		;;
+		*)
+			set +e
+			if $NewMTool; then
+				if (( $NumArguments >= 1 )); then
+					"$ScriptsDir/mib.sh" "$Command" "$@"
+				else
+					"$ScriptsDir/mib.sh" "$@"
+				fi
+				exit $?
+			else
+				# TODO: deprecate this
+				MalterlibTool=true "$ScriptsDir/Generate.sh" "$Command" "$@"
+				MToolExit=$?
+				set -e
+				if [[ $MToolExit == 3 ]]; then
+					echo MTool potentially updated, running command again
+					continue
+				fi
+				exit $MToolExit
+			fi
+	esac
+
+	break
+
+done

@@ -1,0 +1,5 @@
+// Copyright © 2018 Nonna Holding AB
+// Distributed under the MIT license, see license text in LICENSE.Malterlib
+
+Import "Build/SharedRepositoryOnly.MSettings"
+Import "Malterlib_Core_RepositoryModules.MHeader"
