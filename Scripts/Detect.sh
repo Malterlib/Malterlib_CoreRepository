@@ -25,6 +25,9 @@ function DoDetect()
 		MalterlibPlatform=OSX
 		if [[ $ProcessorArch == x86_64 ]] ; then
 			MalterlibArch=x64
+		elif [[ $ProcessorArch == arm64 ]] ; then
+			# TODO: change to arm64 when supported
+			MalterlibArch=x64
 		else
 			echo $ProcessorArch is not supported
 			exit 1
@@ -43,7 +46,7 @@ function DoDetect()
 		echo $SysName is not supported platform
 		exit 1
 	fi
-	
+
 	if [[ "$MalterlibPlatform" ==  Windows ]] ; then
 		function MalterlibConvertPath()
 		{
