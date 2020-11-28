@@ -12,6 +12,10 @@ function DoDetect()
 	local ProcessorArch=$(uname -m)
 
 	if [[ $SysName ==  MINGW* ]] || [[ $SysName ==  CYGWIN* ]] || [[ $SysName ==  windows* ]] ; then
+		if ([[ $SysName ==  MINGW* ]] || [[ $SysName ==  CYGWIN* ]]) && [[ "$TERM" != "dumb" ]] ; then
+			export MalterlibTerminalWidth=`tput cols`
+			export MalterlibTerminalHeight=`tput lines`
+		fi
 		MalterlibPlatform=Windows
 		if [[ $ProcessorArch == i*86 ]] ; then
 			MalterlibArch=x86
@@ -26,8 +30,7 @@ function DoDetect()
 		if [[ $ProcessorArch == x86_64 ]] ; then
 			MalterlibArch=x64
 		elif [[ $ProcessorArch == arm64 ]] ; then
-			# TODO: change to arm64 when supported
-			MalterlibArch=x64
+			MalterlibArch=arm64
 		else
 			echo $ProcessorArch is not supported
 			exit 1

@@ -14,10 +14,12 @@ export MalterlibProtectedEnvironment="MToolIsMalterlib;@MalterlibProtectedEnviro
 while true; do
 
 	export MToolIsMalterlib="true"
+
 	set +e
 	"$MalterlibExecutable" "$@" $ExtraOptions
 	MToolExit=$?
 	set -e
+
 	export MToolIsMalterlib="false"
 
 	if [[ $MToolExit == 3 ]]; then
