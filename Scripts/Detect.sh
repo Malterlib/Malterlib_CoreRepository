@@ -40,7 +40,11 @@ function DoDetect()
 		if [[ $ProcessorArch == i*86 ]] ; then
 			MalterlibArch=x86
 		elif [[ $ProcessorArch == x86_64 ]] ; then
-			MalterlibArch=x64
+			if [[ `getconf LONG_BIT` == "32" ]] ; then
+				MalterlibArch=x86
+			else
+				MalterlibArch=x64
+			fi
 		else
 			echo $ProcessorArch is not supported
 			exit 1
