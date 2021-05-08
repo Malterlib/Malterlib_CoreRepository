@@ -3,87 +3,9 @@
 
 Property
 {
-	MalterlibRemotePrefixesTemplate ";@(Explodee)/@(RepoName)"
-	{
-		!Explodee ""	
-	}
-}
-
-Property.MalterlibModules "CoreRepository;@(Property.MalterlibModules)"
-Property.MalterlibRemotePrefixes "" // User(Repository)="remoteexample=https://gitlab.example.com/Malterlib;@(Repository.Remotes)": Specify extra Malterlib remotes
-{
-	!!MalterlibRemotePrefixes ""
-}
-Property.MalterlibUpstreamAccess "" // User(Repository)=true: Set to true if you have access to https://github.com/Malterlib
-{
-	!!MalterlibUpstreamAccess ""
-}
-Property.MalterlibUpstreamWriteAccess "" // User(Repository)=true: Set to true if you have write access to https://github.com/Malterlib
-{
-	!!MalterlibUpstreamWriteAccess ""
-}
-
-Property
-{
-	MalterlibUpstreamWritableHelper ">Write=@(MalterlibUpstreamWriteAccess)"
-	{
-		&
-		{
-			!MToolVersion ""
-			true "@(MToolVersion->CompareInt('>=', '2'))"
-		}
-	}
-}
-
-%Repository "@(MalterlibModules)"
-{
-	!MalterlibUseGitRepo false
-	Property.RepoName "Malterlib_@(this.Identity).git"
-	Repository
-	{
-		Type Malterlib
-		Remotes "@(ExplodeList('@(MalterlibRemotePrefixes)', ';', 'MalterlibRemotePrefixesTemplate'));@(Repository.Remotes)"
-		{
-			!MalterlibRemotePrefixes  ""
-		}
-		Remotes "malterlib=https://github.com/Malterlib/@(RepoName)@(MalterlibUpstreamWritableHelper);@(Repository.Remotes)"
-		{
-			&
-			{
-				MalterlibUpstreamAccess true
-				!Repository.URL "https://github.com/Malterlib/@(RepoName)"
-			}
-		}
-		ConfigFile "@('../..'->MakeAbsolute())/@(Repository.Type).MRepo"
-		{
-			!!this.Identity "CoreRepository"
-		}
-		StateFile "@('../..'->MakeAbsolute())/@(Repository.Type).MRepoState"
-		{
-			!!this.Identity "CoreRepository"
-		}
-	}
-}
-
-Property
-{
-	MalterlibBinaryRepositories "MalterlibBinaries_@(HostPlatformFamily)_@(HostArchitecture);@(MalterlibBinaryRepositories)"
-
-	MalterlibAllBinaryRepositories false // User(Repository)=true: Set to true to sync all binary repositories.
-	{
-		!!MalterlibAllBinaryRepositories ""
-	}
-}
-
-Property
-{
-	!!MalterlibAllBinaryRepositories true
-
-	MalterlibBinaryRepositories "MalterlibBinaries_OSX_x64;@(MalterlibBinaryRepositories)"
-	MalterlibBinaryRepositories "MalterlibBinaries_Linux_x64;@(MalterlibBinaryRepositories)"
-	MalterlibBinaryRepositories "MalterlibBinaries_Linux_x86;@(MalterlibBinaryRepositories)"
-	MalterlibBinaryRepositories "MalterlibBinaries_Windows_x64;@(MalterlibBinaryRepositories)"
-	MalterlibBinaryRepositories "MalterlibBinaries_Windows_x86;@(MalterlibBinaryRepositories)"
+	MalterlibCompiledFiles define string
+	MalterlibUseGitRepo define bool = true
+	MalterlibChangingBootstrapVersion define bool?
 }
 
 // Windows paths
@@ -95,17 +17,17 @@ Property
 	{
 		&
 		{
-			MalterlibCompiledFiles ""
-			!Empty "@('X:/'->FindDirectoriesIn('CompiledFiles'))"
+			MalterlibCompiledFiles undefined
+			![] "X:/"->FindDirectoriesIn("CompiledFiles")
 		}
 	}
-	MalterlibCompiledFiles "@(HOMEPATH)/.CompiledFiles/"
+	MalterlibCompiledFiles `@(HOMEPATH)/.CompiledFiles/`
 	{
-		!!MalterlibCompiledFiles ""
+		!!MalterlibCompiledFiles undefined
 	}
-	MalterlibCompiledFiles "@(MalterlibCompiledFiles->UnixPath())"
+	MalterlibCompiledFiles MalterlibCompiledFiles->UnixPath()
 	{
-		!MalterlibCompiledFiles ""
+		!MalterlibCompiledFiles undefined
 	}
 }
 
@@ -114,43 +36,151 @@ Property
 {
 	!HostPlatformFamily "Windows"
 
+	MalterlibCompiledFiles "/opt/CompiledFiles/"
+	{
+		&
+		{
+			MalterlibCompiledFiles undefined
+			![] "/opt"->FindDirectoriesIn("CompiledFiles")
+		}
+	}
 	MalterlibCompiledFiles "/CompiledFiles/"
 	{
 		&
 		{
-			MalterlibCompiledFiles ""
-			!Empty "@('/'->FindDirectoriesIn('CompiledFiles'))"
+			MalterlibCompiledFiles undefined
+			![] "/"->FindDirectoriesIn("CompiledFiles")
 		}
 	}
 
-	MalterlibCompiledFiles "@(HOME)/.CompiledFiles/"
+	MalterlibCompiledFiles `@(HOME)/.CompiledFiles/`
 	{
-		!!MalterlibCompiledFiles ""
+		!!MalterlibCompiledFiles undefined
 	}
 }
 
 Property
 {
-	MaltelibBasePathAbsolute "@(Builtin.BasePathAbsolute)"
-	MaltelibBasePathName "@(MaltelibBasePathAbsolute->GetFile())"
-	
-	MalterlibCompiledFilesSourceBase "@(MalterlibCompiledFiles)@(MaltelibBasePathName)-@(Builtin.GeneratedBuildSystemDir->HashSHA256('8'))"
-	GeneratedGlobalDirectory "@(MalterlibCompiledFilesSourceBase)/Generated/"
+	MaltelibBasePathAbsolute define string = Builtin.BasePathAbsolute
+	MaltelibBasePathName define string = MaltelibBasePathAbsolute->GetFile()
 
+	MalterlibCompiledFilesSourceBase define string = `@(MalterlibCompiledFiles)@(MaltelibBasePathName)-@(Builtin.GeneratedBuildSystemDir->HashSHA256(8))`
+	GeneratedGlobalDirectory define string = `@(MalterlibCompiledFilesSourceBase)/Generated/`
+
+	MalterlibIsGitRepository define bool = false
 	MalterlibIsGitRepository true
 	{
-		!Empty "@(Builtin.BasePathAbsolute->FindDirectoriesIn('.git'))"
+		&
+		{
+			!MalterlibChangingBootstrapVersion true
+			![] Builtin.BasePathAbsolute->FindDirectoriesIn(".git")
+		}
 	}
-	MalterlibGitRepoGitDir "@(Builtin.BasePathAbsolute)/.git"
 
-	MalterlibGitOriginRemote "@(ExecuteCommand('@(GeneratedGlobalDirectory)GitOriginRemote.MState', '@(MalterlibGitRepoGitDir)/config', 'git', 'remote', 'get-url', 'origin'))"
+	MalterlibGitRepoGitDir define string = `@(Builtin.BasePathAbsolute)/.git`
+
+	MalterlibGitOriginRemote define string = ""
+	MalterlibGitOriginRemote ExecuteCommand(`@(GeneratedGlobalDirectory)GitOriginRemote.MState`, [`@(MalterlibGitRepoGitDir)/config`], "git", "remote", "get-url", "origin")
 	{
 		!!MalterlibIsGitRepository true
 	}
-	MalterlibGitOriginRemote "@(MalterlibGitOriginRemote->FindGetLine('*'))"
+	MalterlibGitOriginRemote MalterlibGitOriginRemote->FindGetLine("*")
 	{
 		!!MalterlibIsGitRepository true
 	}
+}
+
+Type
+{
+	CRemotePrefix define {
+		Name: string
+		, UrlPrefix: string
+		, Write: bool = false
+	}
+
+	CRemote define {
+		Name: string
+		, URL: string
+		, Write: bool = false
+	}
+}
+
+Property
+{
+	f_MalterlibRemotePrefixesTemplate function(type(CRemotePrefix) _Element) [type(CRemote)] = []
+	f_MalterlibRemotePrefixesTemplate =+ {Name: _Element<Name>, URL: `@(_Element<UrlPrefix>)/@(RepoName)`, Write: _Element<Write>}
+	{
+		!_Element undefined
+	}
+}
+
+Property
+{
+	MalterlibModules define [string] = []
+	MalterlibModules =+ "CoreRepository"
+
+	MalterlibRemotePrefixes define [type(CRemotePrefix)]? // User(Repository)= += [{Name: "remoteexample", UrlPrefix: "https://gitlab.example.com/Malterlib"}]: Specify extra Malterlib remotes
+
+	MalterlibUpstreamAccess define bool = false // User(Repository)=true: Set to true if you have access to https://github.com/Malterlib
+	MalterlibUpstreamAccess undefined
+	{
+		!!MalterlibUpstreamAccess undefined
+	}
+
+	MalterlibUpstreamWriteAccess define bool = false // User(Repository)=true: Set to true if you have write access to https://github.com/Malterlib
+}
+
+%Repository MalterlibModules->Unique()
+{
+	!MalterlibUseGitRepo false
+
+	Property.RepoName define string = `Malterlib_@(this.Identity).git`
+
+	Repository
+	{
+		Type "Malterlib"
+		Remotes =+ MalterlibRemotePrefixes->ForEach("f_MalterlibRemotePrefixesTemplate")
+		{
+			!MalterlibRemotePrefixes undefined
+		}
+		Remotes =+ {Name: "malterlib", URL: `https://github.com/Malterlib/@(RepoName)`, Write: MalterlibUpstreamWriteAccess}
+		{
+			&
+			{
+				MalterlibUpstreamAccess true
+				!Repository.URL `https://github.com/Malterlib/@(RepoName)`
+			}
+		}
+		ConfigFile `@("../.."->MakeAbsolute())/@(Repository.Type).MRepo`
+		{
+			!!this.Identity "CoreRepository"
+		}
+		StateFile `@("../.."->MakeAbsolute())/@(Repository.Type).MRepoState`
+		{
+			!!this.Identity "CoreRepository"
+		}
+	}
+}
+
+
+Property
+{
+	MalterlibBinaryRepositories define [string] = []
+	MalterlibBinaryRepositories =+ `MalterlibBinaries_@(HostPlatformFamily)_@(HostArchitecture)`
+
+	MalterlibAllBinaryRepositories define bool = false // User(Repository)=true: Set to true to sync all binary repositories.
+}
+
+Property
+{
+	!!MalterlibAllBinaryRepositories true
+
+	MalterlibBinaryRepositories =+ "MalterlibBinaries_OSX_x64"
+	MalterlibBinaryRepositories =+ "MalterlibBinaries_OSX_arm64"
+	MalterlibBinaryRepositories =+ "MalterlibBinaries_Linux_x64"
+	MalterlibBinaryRepositories =+ "MalterlibBinaries_Linux_x86"
+	MalterlibBinaryRepositories =+ "MalterlibBinaries_Windows_x64"
+	MalterlibBinaryRepositories =+ "MalterlibBinaries_Windows_x86"
 }
 
 %Repository "."
@@ -160,35 +190,36 @@ Property
 	Repository
 	{
 		Type "Root"
-		Location "@(Builtin.BasePathAbsolute)"
-		URL "@(MalterlibGitOriginRemote)"
+		Location Builtin.BasePathAbsolute
+		URL MalterlibGitOriginRemote
+		ExcludeFromSeen true
 	}
 }
 
-%Repository "@(MalterlibBinaryRepositories)"
+%Repository MalterlibBinaryRepositories->Unique()
 {
 	Property
 	{
-		RepoName "@(this.Identity).git"
-		RepoPlatformFamily "@(this.Identity->ParseFormatString('{}_{}_{}', '{1}'))"
-		RepoArchitecture "@(this.Identity->ParseFormatString('{}_{}_{}', '{2}'))"
-		RepoDir "../../Binaries/Malterlib/@(RepoPlatformFamily)/@(RepoArchitecture)"
+		RepoName define string = `@(this.Identity).git`
+		RepoPlatformFamily define string = this.Identity->ParseFormatString("{}_{}_{}", "{1}")
+		RepoArchitecture define string = this.Identity->ParseFormatString("{}_{}_{}", "{2}")
+		RepoDir define string = `../../Binaries/Malterlib/@(RepoPlatformFamily)/@(RepoArchitecture)`
 	}
 	Repository
 	{
-		Type Malterlib
-		Location "@(RepoDir->MakeAbsolute())"
-		URL "@(Repository.MalterlibRoot)/@(RepoName)"
-		Remotes "@(ExplodeList('@(MalterlibRemotePrefixes)', ';', 'MalterlibRemotePrefixesTemplate'));@(Repository.Remotes)"
+		Type "Malterlib"
+		Location RepoDir->MakeAbsolute()
+		URL `@(Repository.MalterlibRoot)/@(RepoName)`
+		Remotes =+ MalterlibRemotePrefixes->ForEach("f_MalterlibRemotePrefixesTemplate")
 		{
-			!MalterlibRemotePrefixes  ""
+			!MalterlibRemotePrefixes undefined
 		}
-		Remotes "malterlib=https://github.com/Malterlib/@(RepoName)@(MalterlibUpstreamWritableHelper);@(Repository.Remotes)"
+		Remotes =+ {Name: "malterlib", URL: `https://github.com/Malterlib/@(RepoName)`, Write: MalterlibUpstreamWriteAccess}
 		{
 			&
 			{
 				MalterlibUpstreamAccess true
-				!Repository.URL "https://github.com/Malterlib/@(RepoName)"
+				!Repository.URL `https://github.com/Malterlib/@(RepoName)`
 			}
 		}
 	}
@@ -196,18 +227,18 @@ Property
 
 %GenerateFile "mib"
 {
-	!Empty "@('.'->FindFilesIn('mib'))"
+	!true "."->FindFilesIn("mib")->IsEmpty()
 
 	Property
 	{
-		MibScriptFile "@(Builtin.BasePathAbsolute)/mib"
-		SourceScriptFile "@('mib'->MakeAbsolute())"
+		MibScriptFile define string = `@(Builtin.BasePathAbsolute)/mib`
+		SourceScriptFile define string = "mib"->MakeAbsolute()
 	}
 
-	Property
+	GenerateFile
 	{
-		Name "@(MibScriptFile)"
-		Contents "@(ReadFile('@(SourceScriptFile)'))"
+		Name MibScriptFile
+		Contents ReadFile(SourceScriptFile)
 		Executable true
 		UnixLineEnds true
 		UnicodeBOM false

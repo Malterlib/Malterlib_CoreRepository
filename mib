@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright © 2017-2018 Nonna Holding AB
+# Copyright © 2017-2021 Favro Holding AB
 # Distributed under the MIT license, see license text in LICENSE.Malterlib
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -135,98 +135,124 @@ function GetMalterlibCoreHash()
 	cat *.MRepo | grep 'Malterlib/CoreRepository ' | cut '-d ' -f 2 || true
 }
 
-if ! [ -e Malterlib/CoreRepository ]; then
-	BootstrapInit
-	DetectRepoRoot
+MalterlibChangingBootstrapVersion="false"
+BootstrapVersion="3"
+MalterlibCoreBootstrapVersion="2"
 
+function BootstrapCore()
+{
 	if ! [ -e Malterlib/CoreRepository ]; then
+		BootstrapInit
+		DetectRepoRoot
 
-		OutputInfo "Cloning Malterlib/CoreRepository"
+		if ! [ -e Malterlib/CoreRepository ]; then
+
+			OutputInfo "Cloning Malterlib/CoreRepository"
+
+			GitHash=`GetMalterlibCoreHash`
+			if [[ "$GitHash" != "" ]]; then
+				echo "Found commit hash in *.MRepo files: `OutputNote "$GitHash"`"
+
+				git clone -n "$MalterlibRepoRoot/Malterlib_CoreRepository.git" Malterlib/CoreRepository
+				pushd Malterlib/CoreRepository > /dev/null
+				git checkout -B master $GitHash
+				popd > /dev/null
+			else
+				OutputError "Cloud not find commit hash in *.MRepo files using latest default branch"
+
+				git clone "$MalterlibRepoRoot/Malterlib_CoreRepository.git" Malterlib/CoreRepository
+			fi
+
+			echo
+		fi
+	fi
+
+	MalterlibCoreBootstrapVersion="2"
+
+	if [ -e "Malterlib/CoreRepository/Bootstrap.version" ]; then
+		MalterlibCoreBootstrapVersion=`cat "Malterlib/CoreRepository/Bootstrap.version"`
+	fi
+
+	if ! [ -e ./Malterlib/CoreRepository/Scripts/Detect.sh ] || [[ "$MalterlibCoreBootstrapVersion" != "$BootstrapVersion" ]]; then
+		# Upgrade path
+		export MalterlibChangingBootstrapVersion=true
+
+		git -C Malterlib/CoreRepository fetch
 
 		GitHash=`GetMalterlibCoreHash`
-		if [[ "$GitHash" != "" ]]; then
-			echo "Found commit hash in *.MRepo files: `OutputNote "$GitHash"`"
-
-			git clone -n "$MalterlibRepoRoot/Malterlib_CoreRepository.git" Malterlib/CoreRepository
-			pushd Malterlib/CoreRepository > /dev/null
-			git checkout -B master $GitHash
-			popd > /dev/null
-		else
-			OutputError "Cloud not find commit hash in *.MRepo files using latest default branch"
-
-			git clone "$MalterlibRepoRoot/Malterlib_CoreRepository.git" Malterlib/CoreRepository
+		if [[ "$GitHash" == "" ]]; then
+			OutputError "Cloud not find commit hash in *.MRepo, cannot upgrade"
+			exit 1
 		fi
 
-		echo
-	fi
-fi
-
-if ! [ -e ./Malterlib/CoreRepository/Scripts/Detect.sh ]; then
-	# Upgrade path
-	git -C Malterlib/CoreRepository fetch
-
-	GitHash=`GetMalterlibCoreHash`
-	if [[ "$GitHash" == "" ]]; then
-		OutputError "Cloud not find commit hash in *.MRepo, cannot upgrade"
-		exit 1
+		if [[ "$MalterlibRepositoryHardReset" == "true" ]] || (git -C Malterlib/CoreRepository branch -r --contains HEAD > /dev/null && [ -z "$(git -C Malterlib/CoreRepository status --porcelain || echo no)" ]); then
+			git -C Malterlib/CoreRepository checkout -B master $GitHash
+		else
+			OutputError "Malterlib/CoreRepository is not clean, please resolve the situation before trying to upgrade"
+			exit 1
+		fi
 	fi
 
-	if [[ "$MalterlibRepositoryHardReset" == "true" ]] || (git -C Malterlib/CoreRepository branch -r --contains HEAD > /dev/null && [ -z "$(git -C Malterlib/CoreRepository status --porcelain || echo no)" ]); then
-		git -C Malterlib/CoreRepository checkout -B master $GitHash
-	else
-		OutputError "Malterlib/CoreRepository is not clean, please resolve the situation before trying to upgrade"
-		exit 1
+	source ./Malterlib/CoreRepository/Scripts/Detect.sh
+	if [[ "$MalterlibPlatform" ==  Windows ]]; then
+		mkdir -p /tmp
 	fi
-fi
 
-source ./Malterlib/CoreRepository/Scripts/Detect.sh
-if [[ "$MalterlibPlatform" ==  Windows ]]; then
-	mkdir -p /tmp
-fi
+	MalterlibBinariesPath="Binaries/Malterlib/${MalterlibPlatform}/${MalterlibArch}"
+	MalterlibBinariesRepo="MalterlibBinaries_${MalterlibPlatform}_${MalterlibArch}"
 
-MalterlibBinariesPath="Binaries/Malterlib/${MalterlibPlatform}/${MalterlibArch}"
-MalterlibBinariesRepo="MalterlibBinaries_${MalterlibPlatform}_${MalterlibArch}"
+	if [ -e "$MalterlibBinariesPath" ]; then
+		find "$DIR/$MalterlibBinariesPath" -maxdepth 0 -type d -empty -exec rmdir {} \;
+	fi
 
-if [ -e "$MalterlibBinariesPath" ]; then
-	find "$DIR/$MalterlibBinariesPath" -maxdepth 0 -type d -empty -exec rmdir {} \;
-fi
+	if ! [ -e "$MalterlibBinariesPath/Bootstrap.version" ] || [[ `cat "$MalterlibBinariesPath/Bootstrap.version"` != "$BootstrapVersion" ]]; then
+		echo Removing binaries because they are not compatible with current bootstrap process
+		rm -rf "$MalterlibBinariesPath"
+		export MalterlibChangingBootstrapVersion=true
+	fi
 
-BootstrapVersion="2"
-
-if ! [ -e "$MalterlibBinariesPath/Bootstrap.version" ] || [[ `cat "$MalterlibBinariesPath/Bootstrap.version"` != "$BootstrapVersion" ]]; then
-	echo Removing binaries because they are not compatible with current bootstrap process
-	rm -rf "$MalterlibBinariesPath"
-fi
-
-if ! [ -e "$MalterlibBinariesPath" ]; then
-	BootstrapInit
-	DetectRepoRoot
+	if [[ "$MalterlibChangingBootstrapVersion" == "true" ]]; then
+		export Malterlib_UseCachedEnvironment=false
+		if [ -e "$BuildSystem/Default/RepositoryState.json" ]; then
+			while read a; do
+			    echo ${a//\"\"\: 1\,/}
+			done < BuildSystem/Default/RepositoryState.json > BuildSystem/Default/RepositoryState.json.new
+			mv BuildSystem/Default/RepositoryState.json{.new,}
+		fi
+	fi
 
 	if ! [ -e "$MalterlibBinariesPath" ]; then
+		BootstrapInit
+		DetectRepoRoot
 
-		OutputInfo "Cloning $MalterlibBinariesPath"
+		if ! [ -e "$MalterlibBinariesPath" ]; then
 
-		RepoFolder="Malterlib/CoreRepository/"
-		GitHash=`cat Malterlib/CoreRepository/*.MRepo | grep "\\.\\./\\.\\./$MalterlibBinariesPath " | cut '-d ' -f 2 || true`
+			OutputInfo "Cloning $MalterlibBinariesPath"
 
-		if [[ "$GitHash" != "" ]]; then
-			echo "Found commit hash in ${RepoFolder}*.MRepo files: `OutputNote "$GitHash"`"
+			RepoFolder="Malterlib/CoreRepository/"
+			GitHash=`cat Malterlib/CoreRepository/*.MRepo | grep "\\.\\./\\.\\./$MalterlibBinariesPath " | cut '-d ' -f 2 || true`
 
-			git clone -n "$MalterlibRepoRoot/$MalterlibBinariesRepo.git" $MalterlibBinariesPath
-			pushd $MalterlibBinariesPath > /dev/null
-			git checkout -B master $GitHash
-			popd > /dev/null
-		else
-			OutputError "Cloud not find commit hash in ${RepoFolder}*.MRepo files using latest default branch"
+			if [[ "$GitHash" != "" ]]; then
+				echo "Found commit hash in ${RepoFolder}*.MRepo files: `OutputNote "$GitHash"`"
 
-			git clone "$MalterlibRepoRoot/$MalterlibBinariesRepo.git" $MalterlibBinariesPath
+				git clone -n "$MalterlibRepoRoot/$MalterlibBinariesRepo.git" $MalterlibBinariesPath
+				pushd $MalterlibBinariesPath > /dev/null
+				git checkout -B master $GitHash
+				popd > /dev/null
+			else
+				OutputError "Cloud not find commit hash in ${RepoFolder}*.MRepo files using latest default branch"
+
+				git clone "$MalterlibRepoRoot/$MalterlibBinariesRepo.git" $MalterlibBinariesPath
+			fi
+
+			echo
 		fi
-
-		echo
 	fi
-fi
 
-ReportBootstrapDone
+	ReportBootstrapDone
+}
+
+BootstrapCore
 
 export MalterlibBinariesPath
 export MalterlibScriptPath="$DIR"
@@ -239,12 +265,9 @@ if (( $NumArguments >= 1 )); then
 	shift
 fi
 
+RetriedBootstrap="false"
+
 while true; do
-	if [ -e "$PWD/Malterlib/CoreRepository/Scripts/mib.sh" ]; then
-		NewMTool=true
-	else
-		NewMTool=false
-	fi
 
 	function UpdateMTool()
 	{
@@ -328,18 +351,22 @@ while true; do
 			fi
 
 			set +e
-			if $NewMTool; then
-				"$ScriptsDir/mib.sh" generate "$@"
-			else
-				"$ScriptsDir/Generate.sh" "$@"
-			fi
+
+			"$ScriptsDir/mib.sh" generate "$@"
+
 			MToolExit=$?
 			set -e
-			if [[ $MToolExit == 3 ]]; then
-				# TODO: deprecate this
-				echo MTool potentially updated, running command again
-				continue
-			elif [[ $MToolExit != 2 ]]; then
+
+			if [[ "$MalterlibChangingBootstrapVersion" == "true" ]] && [[ "$RetriedBootstrap" == "false" ]]; then
+				if [[ $MToolExit > 0 ]]; then
+					RetriedBootstrap="true"
+					echo MTool potentially updated, running bootstrap again
+					BootstrapCore
+					continue
+				fi
+			fi
+
+			if [[ $MToolExit != 2 ]]; then
 				exit $MToolExit
 			fi
 
@@ -386,24 +413,24 @@ while true; do
 		;;
 		*)
 			set +e
-			if $NewMTool; then
-				if (( $NumArguments >= 1 )); then
-					"$ScriptsDir/mib.sh" "$Command" "$@"
-				else
-					"$ScriptsDir/mib.sh" "$@"
-				fi
-				exit $?
+			if (( $NumArguments >= 1 )); then
+				"$ScriptsDir/mib.sh" "$Command" "$@"
 			else
-				# TODO: deprecate this
-				MalterlibTool=true "$ScriptsDir/Generate.sh" "$Command" "$@"
-				MToolExit=$?
-				set -e
-				if [[ $MToolExit == 3 ]]; then
-					echo MTool potentially updated, running command again
+				"$ScriptsDir/mib.sh" "$@"
+			fi
+			MToolExit=$?
+			set -e
+
+			if [[ "$MalterlibChangingBootstrapVersion" == "true" ]] && [[ "$RetriedBootstrap" == "false" ]]; then
+				if [[ $MToolExit > 0 ]]; then
+					RetriedBootstrap="true"
+					echo MTool potentially updated, running bootstrap again
+					BootstrapCore
 					continue
 				fi
-				exit $MToolExit
 			fi
+
+			exit $MToolExit
 	esac
 
 	break
