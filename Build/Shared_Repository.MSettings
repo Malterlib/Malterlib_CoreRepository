@@ -1,307 +1,347 @@
-// Copyright © 2018 Nonna Holding AB 
+// Copyright © 2021 Nonna Holding AB
 // Distributed under the MIT license, see license text in LICENSE.Malterlib
 
 Property
 {
-	MalterlibRepositoryEditor "" // User(Tools)="open -a SourceTree {}": Specify the editor to use for repositories. {} is replaced with the repository directory. The tool is launched from the repository directory.
-	{
-		!!MalterlibRepositoryEditor ""
-	}
-	MalterlibRepositoryEditorSequential false // User(Tools)=true: Set to true if your repository editor does not support launching concurrently
-	{
-		!!MalterlibRepositoryEditorSequential ""
-	}
+	MalterlibRepositoryEditor define string // User(Tools)="open -a SourceTree {}": Specify the editor to use for repositories. {} is replaced with the repository directory. The tool is launched from the repository directory.
+	MalterlibRepositoryEditorSequential define bool = false // User(Tools)=true: Set to true if your repository editor does not support launching concurrently
+	MalterlibRepositoryEditorSleep define float = 0.0
+	MalterlibRepoRoot define string?
+	MalterlibRepositoryEditorWorkingDir define string = ""
 }
 Property
 {
-	!!HostPlatformFamily OSX
+	!!HostPlatformFamily "OSX"
+
+	MalterlibRepositoryEditor "open -a \"Sublime Merge\" {}"
+	{
+		&
+ 		{
+			MalterlibRepositoryEditor undefined
+			![] "/Applications"->FindDirectoriesIn("Sublime Merge.app")
+ 		}
+	}
+	MalterlibRepositoryEditorSequential true
+	{
+		&
+		{
+			MalterlibRepositoryEditorSequential undefined
+			MalterlibRepositoryEditor "open -a \"Sublime Merge\" {}"
+		}
+	}
 
 	MalterlibRepositoryEditor "/usr/local/bin/fork status"
 	{
 		&
 		{
-			MalterlibRepositoryEditor ""
-			!Empty "@('/usr/local/bin'->FindFilesIn('fork'))"
+			MalterlibRepositoryEditor undefined
+			![] "/usr/local/bin"->FindFilesIn("fork")
 		}
 	}
 	MalterlibRepositoryEditor "open -a SourceTree {}"
 	{
 		&
 		{
-			MalterlibRepositoryEditor ""
-			!Empty "@('/Applications'->FindDirectoriesIn('SourceTree.app'))"
+			MalterlibRepositoryEditor undefined
+			![] "/Applications"->FindDirectoriesIn("SourceTree.app")
 		}
 	}
 }
 Property
 {
-	!!HostPlatformFamily Windows
+	!!HostPlatformFamily "Windows"
 
-/*	ForkDirectory "@(USERPROFILE)/AppData/Local/Fork"
-	MalterlibRepositoryEditor "@(ForkDirectory)/Fork.exe status"
+	MalterlibRepositoryEditor EscapeHost(`@(PROGRAMFILES)/Sublime Merge/smerge.exe`, "{}")
+	{
+		&
+ 		{
+			MalterlibRepositoryEditor undefined
+			![] `@(PROGRAMFILES)/Sublime Merge`->FindFilesIn("smerge.exe")
+ 		}
+	}
+
+	SourceTreeDirectory define string
+	SourceTreeDirectory `@(USERPROFILE)/AppData/Local/SourceTree`
+	{
+		!!SourceTreeDirectory undefined
+	}
+
+	SourceTreeEditor define string
+	SourceTreeEditor EscapeHost(`@(SourceTreeDirectory)/SourceTree.exe`, "-f", "{}", "status")
+
+	MalterlibRepositoryEditor SourceTreeEditor
 	{
 		&
 		{
-			MalterlibRepositoryEditor ""
-			!Empty "@(ForkDirectory->FindFilesIn('Fork.exe'))"
-		}
-	}*/
-
-	SourceTreeDirectory "@(USERPROFILE)/AppData/Local/SourceTree"
-	MalterlibRepositoryEditor "@(SourceTreeDirectory)/SourceTree.exe -f {} status"
-	{
-		&
-		{
-			MalterlibRepositoryEditor ""
-			!Empty "@(SourceTreeDirectory->FindFilesIn('SourceTree.exe'))"
+			MalterlibRepositoryEditor undefined
+			![] SourceTreeDirectory->FindFilesIn("SourceTree.exe")
 		}
 	}
 	MalterlibRepositoryEditorSequential true
 	{
-		!!MalterlibRepositoryEditor "@(SourceTreeDirectory)/SourceTree.exe -f {} status"
+		&
+		{
+			MalterlibRepositoryEditorSequential undefined
+			MalterlibRepositoryEditor SourceTreeEditor
+		}
 	}
-	MalterlibRepositoryEditorWorkingDir "@(SourceTreeDirectory)"
+	MalterlibRepositoryEditorWorkingDir SourceTreeDirectory
 	{
-		!!MalterlibRepositoryEditor "@(SourceTreeDirectory)/SourceTree.exe -f {} status"
+		&
+		{
+			MalterlibRepositoryEditorWorkingDir undefined
+			MalterlibRepositoryEditor SourceTreeEditor
+		}
 	}
-	MalterlibRepositoryEditorSleep "1.0"
+	MalterlibRepositoryEditorSleep 1.0
 	{
-		!!MalterlibRepositoryEditor "@(SourceTreeDirectory)/SourceTree.exe -f {} status"
+		&
+		{
+			MalterlibRepositoryEditorWorkingDir undefined
+			MalterlibRepositoryEditor SourceTreeEditor
+		}
 	}
 }
 
 Repository
 {
-	UserEmail "" // User(Repository)=email@example.com: Specify user.email to configure for repositories
+	ConvertUnderscoreToPath define bool = false
+
+	UserEmail define string = "" // User(Repository)=email@example.com: Specify user.email to configure for repositories
+	UserName define string = "" // User(Repository)="Example Name": Specify user.name to configure for repositories
+
+	GithubCompany define string?
+	DefaultPrefix define string?
+	DefaultLocationPrefix define string?
+
+	NoPushRemotes ["upstream*"]
 	{
-		!!Repository.UserEmail ""
-	}
-	UserName "" // User(Repository)="Example Name": Specify user.name to configure for repositories
-	{
-		!!Repository.UserName ""
+		!!Repository.NoPushRemotes undefined
 	}
 
-	NoPushRemotes "upstream*"
-	{
-		!!Repository.NoPushRemotes ""
-	}
-
-	DefaultRoot "https://github.com/@(Repository.GithubCompany)"
+	DefaultRoot define string = "Whata"
+	DefaultRoot `https://github.com/@(Repository.GithubCompany)`
 	{
 		&
 		{
-			Repository.DefaultRoot ""
-			!Repository.GithubCompany ""
+			Repository.DefaultRoot undefined
+			!Repository.GithubCompany undefined
 		}
 	}
 
-	DefaultPrefix "@(Repository.GithubCompany)_"
+	DefaultPrefix `@(Repository.GithubCompany)_`
 	{
 		&
 		{
-			Repository.DefaultPrefix ""
-			!Repository.GithubCompany ""
+			Repository.DefaultPrefix undefined
+			!Repository.GithubCompany undefined
 		}
 	}
 
-	DefaultLocationPrefix "@(Repository.DefaultPrefix->Replace('_', '/'))"
+	DefaultLocationPrefix Repository.DefaultPrefix->Replace("_", "/")
 	{
-		!!Repository.DefaultLocationPrefix ""
+		&
+		{
+			Repository.DefaultLocationPrefix undefined
+			!Repository.DefaultPrefix undefined
+		}
 	}
 
 	Type "Direct"
 	{
-		!!Repository.Type ""
+		!!Repository.Type undefined
 	}
 
-	MalterlibRoot "@(MalterlibRepoRoot)"
+	MalterlibRoot define string
+	MalterlibRoot MalterlibRepoRoot
 	{
 		&
 		{
-			Repository.MalterlibRoot ""
-			!MalterlibRepoRoot ""
+			Repository.MalterlibRoot undefined
+			!MalterlibRepoRoot undefined
 		}
 	}
 
 	MalterlibRoot "https://github.com/Malterlib"
 	{
-		!!Repository.MalterlibRoot ""
+		!!Repository.MalterlibRoot undefined
 	}
 
+	ExternalRoot define string
 	ExternalRoot "https://github.com/Malterlib"
 	{
-		!!Repository.ExternalRoot ""
+		!!Repository.ExternalRoot undefined
 	}
 
-	ConfigFile "@(this.IdentityPath->GetPath())/@(Repository.Type).MRepo"
+	ConfigFile `@(this.IdentityPath->GetPath())/@(Repository.Type).MRepo`
 	{
 		&
 		{
-			Repository.ConfigFile ""
+			Repository.ConfigFile undefined
 			!Repository.Type "Root"
 		}
 	}
-	StateFile "@(this.IdentityPath->GetPath())/@(Repository.Type).MRepoState"
+	StateFile `@(this.IdentityPath->GetPath())/@(Repository.Type).MRepoState`
 	{
 		&
 		{
-			Repository.StateFile ""
+			Repository.StateFile undefined
 			!Repository.Type "Root"
 		}
 	}
-	Prefix "@(Repository.DefaultPrefix)"
+	Prefix define string = ""
+	Prefix Repository.DefaultPrefix
 	{
 		&
 		{
-			Repository.Prefix ""
-			!Repository.DefaultPrefix ""
+			Repository.Prefix undefined
+			!Repository.DefaultPrefix undefined
 		}
 	}
 
-	ProtectedBranches "protected/*;@(Repository.ProtectedBranches)"
+	ProtectedBranches =+ "protected/*"
 
-	ProtectedBranches "malterlib_*;@(Repository.ProtectedBranches)"
+	ProtectedBranches =+ "malterlib_*"
 	{
-		!!Repository.Type External
-	}
-
-	ProtectedTags "malterlib_*;@(Repository.ProtectedTags)"
-	{
-		!!Repository.Type External
+		!!Repository.Type "External"
 	}
 
-	URL "@(Repository.ExternalRoot)/@(this.Identity).git"
+	ProtectedTags =+ "malterlib_*"
+	{
+		!!Repository.Type "External"
+	}
+
+	URL `@(Repository.ExternalRoot)/@(this.Identity).git`
 	{
 		&
 		{
-			Repository.URL ""
-			Repository.Type External
+			Repository.URL undefined
+			Repository.Type "External"
 		}
 	}
-	URL "@(Repository.MalterlibRoot)/Malterlib_@(this.Identity).git"
+	URL `@(Repository.MalterlibRoot)/Malterlib_@(this.Identity).git`
 	{
 		&
 		{
-			Repository.URL ""
-			Repository.Type Malterlib
+			Repository.URL undefined
+			Repository.Type "Malterlib"
 		}
 	}
-	URL "@(Repository.DefaultRoot)/@(Repository.Prefix)@(this.Identity).git"
+	URL `@(Repository.DefaultRoot)/@(Repository.Prefix)@(this.Identity).git`
 	{
 		&
 		{
-			Repository.URL ""
-			Repository.Type Direct
+			Repository.URL undefined
+			Repository.Type "Direct"
 		}
 	}
-	Location "@('../../../External'->MakeAbsolute())/@(this.Identity->ParseFormatString('{}_{}', '{}/{}'))"
+	Location `@("../../../External"->MakeAbsolute())/@(this.Identity->ParseFormatString("{}_{}", "{}/{}"))`
 	{
 		&
 		{
-			Repository.Location ""
-			Repository.Type External
+			Repository.Location undefined
+			Repository.Type "External"
 			Repository.ConvertUnderscoreToPath true
 		}
 	}
-	Location "@('../../../External'->MakeAbsolute())/@(this.Identity)"
+	Location `@("../../../External"->MakeAbsolute())/@(this.Identity)`
 	{
 		&
 		{
-			Repository.Location ""
-			Repository.Type External
+			Repository.Location undefined
+			Repository.Type "External"
 		}
 	}
 
-	Location "@('../../../Malterlib'->MakeAbsolute())/@(this.Identity)"
+	Location `@("../../../Malterlib"->MakeAbsolute())/@(this.Identity)`
 	{
 		&
 		{
-			Repository.Location ""
-			Repository.Type Malterlib
+			Repository.Location undefined
+			Repository.Type "Malterlib"
 		}
 	}
 
-	LocationPrefix "@(Repository.DefaultLocationPrefix)"
+	LocationPrefix define string = ""
+	LocationPrefix Repository.DefaultLocationPrefix
 	{
 		&
 		{
-			Repository.LocationPrefix ""
-			!Repository.DefaultLocationPrefix ""
+			Repository.LocationPrefix undefined
+			!Repository.DefaultLocationPrefix undefined
 		}
 	}
-
-	CalcLocation "../../../@(Repository.LocationPrefix)@(this.Identity)"
-	
-	Location "@(Repository.CalcLocation->MakeAbsolute())"
+	Location `../../../@(Repository.LocationPrefix)@(this.Identity)`->MakeAbsolute()
 	{
 		&
 		{
-			Repository.Location ""
-			Repository.Type Direct
-			!Repository.SubmodulePrefix "nthoenuth"
+			Repository.Location undefined
+			Repository.Type "Direct"
 		}
 	}
 	DefaultBranch "malterlib"
 	{
 		&
 		{
-			Repository.DefaultBranch ""
-			Repository.Type External
+			Repository.DefaultBranch undefined
+			Repository.Type "External"
 		}
+	}
+	DefaultBranch "master"
+	{
+		!!Repository.DefaultBranch undefined
 	}
 
 	DefaultUpstreamBranch "master"
 	{
 		&
 		{
-			Repository.DefaultUpstreamBranch ""
-			Repository.Type External
+			Repository.DefaultUpstreamBranch undefined
+			Repository.Type "External"
 		}
 	}
 
-	DefaultUpstreamBranch "@(DefaultBranch)"
+	DefaultUpstreamBranch Repository.DefaultBranch
 	{
-		!!Repository.DefaultUpstreamBranch ""
+		!!Repository.DefaultUpstreamBranch undefined
 	}
 
-	DefaultBranch "master"
+	Submodule false
 	{
-		!!Repository.DefaultBranch ""
+		!!Repository.Submodule undefined
 	}
-	Submodule "false"
-	{
-		!!Repository.Submodule ""
-	}
-	SubmodulePrefix "@(Repository.DefaultPrefix)"
+
+	SubmodulePrefix define string = ""
+	SubmodulePrefix Repository.DefaultPrefix
 	{
 		&
 		{
-			Repository.SubmodulePrefix ""
-			!Repository.DefaultPrefix ""
+			Repository.SubmodulePrefix undefined
+			!Repository.DefaultPrefix undefined
 		}
 	}
-	SubmoduleName "External_@(this.Identity)"
+	SubmoduleName `External_@(this.Identity)`
 	{
 		&
 		{
-			Repository.SubmoduleName ""
-			Repository.Type External
+			Repository.SubmoduleName undefined
+			Repository.Type "External"
 		}
 	}
-	SubmoduleName "Malterlib_@(this.Identity)"
+	SubmoduleName `Malterlib_@(this.Identity)`
 	{
 		&
 		{
-			Repository.SubmoduleName ""
-			Repository.Type Malterlib
+			Repository.SubmoduleName undefined
+			Repository.Type "Malterlib"
 		}
 	}
-	SubmoduleName "@(Repository.SubmodulePrefix)@(this.Identity)"
+	SubmoduleName `@(Repository.SubmodulePrefix)@(this.Identity)`
 	{
 		&
 		{
-			Repository.SubmoduleName ""
-			Repository.Type Direct
+			Repository.SubmoduleName undefined
+			Repository.Type "Direct"
 		}
 	}
 }
